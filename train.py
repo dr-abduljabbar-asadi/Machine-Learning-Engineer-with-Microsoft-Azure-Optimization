@@ -75,10 +75,16 @@ def main():
     run.log("Regularization Strength:", float(args.C))
     run.log("Max iterations:", int(args.max_iter))
 
-    # Read the public CSV directly with pandas. This bypasses azureml-dataprep,
-    # which fails on the cluster with "Compute has no identity provisioned" when
-    # it tries to authenticate access to the data stream.
-    df = pd.read_csv(DATA_URL)
+    # Prefer a local copy of the CSV bundled with the training snapshot. The
+    # compute cluster is blocked from the public blob (HTTP 403), so the notebook
+    # downloads the file next to this script before submitting. Fall back to the
+    # URL only if the local file is not present (e.g. running locally).
+    here = os.path.dirname(os.path.abspath(__file__))
+    local_csv = os.path.join(here, "bankmarketing_train.csv")
+    if os.path.exists(local_csv):
+        df = pd.read_csv(local_csv)
+    else:
+        df = pd.read_csv(DATA_URL)
     x, y = clean_data(df)
 
     x_train, x_test, y_train, y_test = train_test_split(
