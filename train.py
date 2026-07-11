@@ -7,7 +7,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
 from azureml.core.run import Run
-from azureml.data.dataset_factory import TabularDatasetFactory
 
 # Bank marketing dataset (public sample data).
 DATA_URL = (
@@ -17,14 +16,19 @@ DATA_URL = (
 
 
 def clean_data(data):
-    """Clean and one-hot encode the bank marketing dataset."""
+    """Clean and one-hot encode the bank marketing dataset.
+
+    Accepts either a pandas DataFrame or an Azure ML TabularDataset.
+    """
     months = {
         "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
         "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
     }
     weekdays = {"mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6, "sun": 7}
 
-    x_df = data.to_pandas_dataframe().dropna()
+    if hasattr(data, "to_pandas_dataframe"):
+        data = data.to_pandas_dataframe()
+    x_df = data.dropna()
 
     jobs = pd.get_dummies(x_df.job, prefix="job")
     x_df.drop("job", inplace=True, axis=1)
@@ -71,11 +75,11 @@ def main():
     run.log("Regularization Strength:", float(args.C))
     run.log("Max iterations:", int(args.max_iter))
 
-    # Load the data. validate=False avoids the remote "Authentication failed
-    # when trying to access the stream" error; the data is still read by
-    # to_pandas_dataframe().
-    ds = TabularDatasetFactory.from_delimited_files(path=DATA_URL, validate=False)
-    x, y = clean_data(ds)
+    # Read the public CSV directly with pandas. This bypasses azureml-dataprep,
+    # which fails on the cluster with "Compute has no identity provisioned" when
+    # it tries to authenticate access to the data stream.
+    df = pd.read_csv(DATA_URL)
+    x, y = clean_data(df)
 
     x_train, x_test, y_train, y_test = train_test_split(
         x, y, test_size=0.3, random_state=42
